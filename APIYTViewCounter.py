@@ -10,7 +10,7 @@ API_VERSION = 'v3'
 
 def authenticate_youtube():
     """Handles the OAuth flow to get permission to access YouTube"""
-    print("🔑 Authenticating with YouTube...")
+    print(" Authenticating with YouTube...")
     try:
         flow = InstalledAppFlow.from_client_secrets_file(
             'client_secrets.json', 
@@ -24,7 +24,7 @@ def authenticate_youtube():
 
 def get_video_details(youtube, video_id):
     """Gets the current view count and title of a video"""
-    print(f"📊 Getting stats for video {video_id}...")
+    print(f" Getting stats for video {video_id}...")
     try:
         response = youtube.videos().list(
             part='snippet,statistics',
@@ -32,25 +32,24 @@ def get_video_details(youtube, video_id):
         ).execute()
         
         if not response['items']:
-            print("⚠️ Video not found - check your video ID")
+            print(" Video not found - check your video ID")
             return None
             
         video = response['items'][0]
         views = int(video['statistics']['viewCount'])
         title = video['snippet']['title']
         
-        print(f"✅ Found video: '{title}' with {views:,} views")
+        print(f" Found video: '{title}' with {views:,} views")
         return {'views': views, 'title': title}
     
     except HttpError as error:
-        print(f"🚨 YouTube API error: {error}")
+        print(f" YouTube API error: {error}")
         return None
 
 def update_video_title(youtube, video_id, new_title):
     """Updates the video title on YouTube"""
-    print(f"✏️ Attempting to update title to: '{new_title}'")
+    print(f" Attempting to update title to: '{new_title}'")
     try:
-        # First get current video details
         video_response = youtube.videos().list(
             part='snippet',
             id=video_id
@@ -59,7 +58,6 @@ def update_video_title(youtube, video_id, new_title):
         video = video_response['items'][0]
         video['snippet']['title'] = new_title
         
-        # Sends the update request
         youtube.videos().update(
             part='snippet',
             body={
@@ -76,28 +74,25 @@ def update_video_title(youtube, video_id, new_title):
         return False
 
 def format_view_count(views):
-    """Makes the view count look nice (e.g., 1000000 → 1,000,000)"""
+    """Formats the view count with commas"""
+    if views < 1000:
+        return str(views)
     return f"{views:,}"
 
 def main():
-    # YouTube video ID (from the URL)
     VIDEO_ID = "YOUR_VIDEO_ID_HERE"
     
-    # Connect to YouTube
     youtube = authenticate_youtube()
     if not youtube:
         return
     
-    # Get current video info
     video_info = get_video_details(youtube, VIDEO_ID)
     if not video_info:
         return
     
-    # Create the new title
     views_formatted = format_view_count(video_info['views'])
     new_title = f"{video_info['title']} 👀 {views_formatted} views"
     
-    # Update the video
     update_video_title(youtube, VIDEO_ID, new_title)
 
 if __name__ == "__main__":

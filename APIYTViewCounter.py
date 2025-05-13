@@ -1,94 +1,106 @@
-from googleapiclient.discovery import build
-from google.oauth2 import service_account
-import time
 import os
-service_account_file = #'path/to/your/service_account.json'  # Update this path
-print("os.path.exists(service_account_file):", os.path.exists(service_account_file))
-with open(service_account_file, 'r') as f:
-    print("file readable")
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
-    # secutity check
-    if os.path.exists(''): # Check if the file exists
-        print("Service account file exists")
-try:
-    from google.oauth2 import service_account
-except ImportError:
-    # Fallback for some environments
-    from google.auth import service_account
+SCOPES = ['https://www.googleapis.com/auth/youtube.force-ssl']
+API_SERVICE = 'youtube'
+API_VERSION = 'v3'
 
-# Set up the YouTube API client
-def initialize_youtube_client():
+def authenticate_youtube():
+    """Handles the OAuth flow to get permission to access YouTube"""
+    print("🔑 Authenticating with YouTube...")
     try:
-        service_account_file = 'null'  # Update this path
-        credentials = service_account.Credentials.from_service_account_file(
-            service_account_file,
-            scopes=['https://www.googleapis.com/auth/youtube.force-ssl']
+        flow = InstalledAppFlow.from_client_secrets_file(
+            'client_secrets.json', 
+            SCOPES
         )
-        return build('youtube', 'v3', credentials=credentials)
+        credentials = flow.run_local_server(port=0)
+        return build(API_SERVICE, API_VERSION, credentials=credentials)
     except Exception as e:
-        print(f"Error initializing YouTube client: {e}")
+        print(f" Authentication failed: {e}")
         return None
 
-# Alternative method using API key (if you don't have service account)
-def initialize_youtube_client_with_key():
-    API_KEY = "null"  # Your API key
-    return build('youtube', 'v3', developerKey=API_KEY)
-
-youtube = initialize_youtube_client() or initialize_youtube_client_with_key()
-
-def update_video_title(video_id, new_title):
+def get_video_details(youtube, video_id):
+    """Gets the current view count and title of a video"""
+    print(f"📊 Getting stats for video {video_id}...")
     try:
-        request = youtube.videos().update(
-            part="snippet",
-            body={
-                "id": video_id,
-                "snippet": {
-                    "title": new_title,
-                    "categoryId": "22",
-                    "description": "Updated description",
-                    "tags": ["tag1", "tag2"],
-                    "defaultLanguage": "en",
-                }
-            }
-        )
-        response = request.execute()
-        print(f"Title updated successfully: {new_title}")
-        return response
-    except Exception as e:
-        print(f"Error updating title: {e}")
-        return None
-
-def get_views(video_id):
-    try:
-        request = youtube.videos().list(
-            part="statistics",
+        response = youtube.videos().list(
+            part='snippet,statistics',
             id=video_id
-        )
-        response = request.execute()
-        return int(response['items'][0]['statistics']['viewCount'])
-    except Exception as e:
-        print(f"Error getting view count: {e}")
-        return 0
-
-# Main loop
-def main():
-    VIDEO_ID = "your_video_id"  # Replace with your video ID
-    last_views = 0
+        ).execute()
+        
+        if not response['items']:
+            print("⚠️ Video not found - check your video ID")
+            return None
+            
+        video = response['items'][0]
+        views = int(video['statistics']['viewCount'])
+        title = video['snippet']['title']
+        
+        print(f"✅ Found video: '{title}' with {views:,} views")
+        return {'views': views, 'title': title}
     
-    while True:
-        try:
-            current_views = get_views(VIDEO_ID)
-            if current_views > last_views:
-                new_title = f"My Video - {current_views} views!"
-                update_video_title(VIDEO_ID, new_title)
-                last_views = current_views
-            time.sleep(60)  # Wait for 1 minute before checking again
-        except KeyboardInterrupt:
-            print("Script stopped by user")
-            break
-        except Exception as e:
-            print(f"Error in main loop: {e}")
-            time.sleep(60)
+    except HttpError as error:
+        print(f"🚨 YouTube API error: {error}")
+        return None
+
+def update_video_title(youtube, video_id, new_title):
+    """Updates the video title on YouTube"""
+    print(f"✏️ Attempting to update title to: '{new_title}'")
+    try:
+        # First get current video details
+        video_response = youtube.videos().list(
+            part='snippet',
+            id=video_id
+        ).execute()
+        
+        video = video_response['items'][0]
+        video['snippet']['title'] = new_title
+        
+        # Sends the update request
+        youtube.videos().update(
+            part='snippet',
+            body={
+                'id': video_id,
+                'snippet': video['snippet']
+            }
+        ).execute()
+        
+        print(" Title updated successfully!")
+        return True
+        
+    except HttpError as error:
+        print(f" Failed to update title: {error}")
+        return False
+
+def format_view_count(views):
+    """Makes the view count look nice (e.g., 1000000 → 1,000,000)"""
+    return f"{views:,}"
+
+def main():
+    # YouTube video ID (from the URL)
+    VIDEO_ID = "YOUR_VIDEO_ID_HERE"
+    
+    # Connect to YouTube
+    youtube = authenticate_youtube()
+    if not youtube:
+        return
+    
+    # Get current video info
+    video_info = get_video_details(youtube, VIDEO_ID)
+    if not video_info:
+        return
+    
+    # Create the new title
+    views_formatted = format_view_count(video_info['views'])
+    new_title = f"{video_info['title']} 👀 {views_formatted} views"
+    
+    # Update the video
+    update_video_title(youtube, VIDEO_ID, new_title)
 
 if __name__ == "__main__":
+    print(" Starting YouTube View Counter Updater")
     main()
+    print(" Done!")
